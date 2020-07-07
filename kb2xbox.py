@@ -2,6 +2,7 @@
 
 from collections import defaultdict
 import sys
+import time
 import glob
 import argparse
 import libevdev
@@ -103,6 +104,14 @@ def printKeyboards(args):
                 print("        Input driver version is {}.{}.{}".format(v >> 16, (v >> 8) & 0xff, v & 0xff))
 
 
+def anyKeyPressed(fd):
+    dev = libevdev.Device(fd)
+    for c in dev.evbits[libevdev.EV_KEY]:
+        if dev.value[c] != 0:
+            return True
+    return False
+
+
 def main(args):
 
     if "-l" in args or "--list" in args:
@@ -126,6 +135,9 @@ def main(args):
     # prepare reading keyboard device
     path = argv.device
     fd = open(path, 'rb')
+    # wait until all keys are released (sometimes Enter is still pressed down when this script is executed)
+    while anyKeyPressed(fd):
+        time.sleep(0.01)
     devkb = libevdev.Device(fd)
 
     # prepare writing device
@@ -148,26 +160,31 @@ def main(args):
     devkb.grab()
     grab = True
     leftctrl = False
+    f1 = False
+    doGrabChangeReached = False
+
     run = True
     while run:
         for e in devkb.events():
-            for c in controllers:
-                c.fire(e)
+            if grab:
+                for c in controllers:
+                    c.fire(e)
             if e.code == libevdev.EV_KEY.KEY_LEFTCTRL:
                 leftctrl = False if e.value == 0 else True
+                if not leftctrl and not f1 and doGrabChangeReached:
+                    doGrabChangeReached = False
+                    grab = not grab
+                    print("Received Ctrl+F1. Set grab to {}.".format(grab))
+                    devkb.grab() if grab else devkb.ungrab()
             elif e.code == libevdev.EV_KEY.KEY_ESC:
                 if e.value == 1 and leftctrl:
                     print("Received Ctrl+Escape. Exit.")
                     run = False
                     break
             elif e.code == libevdev.EV_KEY.KEY_F1:
-                if e.value == 1 and leftctrl:
-                    grab = not grab
-                    print("Received Ctrl+F1. Set grab to {}".format(grab))
-                    if grab:
-                        devkb.grab()
-                    else:
-                        devkb.ungrab()
+                f1 = False if e.value == 0 else True
+                if f1 and leftctrl:
+                    doGrabChangeReached = True
     return 0
 
 if __name__ == "__main__":
