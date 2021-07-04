@@ -7,6 +7,7 @@ import glob
 import argparse
 import libevdev
 
+
 class XBoxController():
 
     def __init__(self, file, devkb):
@@ -49,9 +50,14 @@ class XBoxController():
                                 mapping[evkb, 1] = 1
                                 if evjs.type == libevdev.EV_ABS:
                                     steps = (ai.maximum - ai.minimum) // len(keys)
-                                    if i >= len(keys) // 2:
-                                        i += 1
-                                    mapping[evkb, 1] = ai.minimum + steps * i
+                                    # ABS_Z and ABS_RZ have default values (not pressed down state) of minimum
+                                    if var == "ABS_Z" or var == "ABS_RZ":
+                                        mapping[evkb, 0] = ai.minimum
+                                        mapping[evkb, 1] = ai.minimum + steps * (i+1)
+                                    else:
+                                        if i >= len(keys) // 2:
+                                            i += 1
+                                        mapping[evkb, 1] = ai.minimum + steps * i
                                 print("mapping {} -> {}, {}".format(evkb.name, evjs.name, mapping[evkb, 1]))
         devjs.id = id
         return mapping
